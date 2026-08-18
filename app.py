@@ -140,11 +140,11 @@ def analyze_candles(candles):
     """
     import pandas as pd
 
-    if len(candles) < 10:
+    if len(candles) < 5:
         return {
             "signal": "NO SIGNAL",
             "confidence": 0,
-            "reason": f"Only {len(candles)} verified candles received; 10 required for the basic model.",
+            "reason": f"Only {len(candles)} verified candles received; at least 5 are required for the basic model.",
             "candles_used": len(candles),
         }
 
@@ -164,11 +164,11 @@ def analyze_candles(candles):
         df = df.sort_values("time")
 
     df = df.dropna(subset=["open", "high", "low", "close"]).reset_index(drop=True)
-    if len(df) < 10:
+    if len(df) < 5:
         return {
             "signal": "NO SIGNAL",
             "confidence": 0,
-            "reason": f"Only {len(df)} usable candles remain after validation; 10 required.",
+            "reason": f"Only {len(df)} usable candles remain after validation; at least 5 are required.",
             "candles_used": len(df),
         }
 
@@ -176,29 +176,35 @@ def analyze_candles(candles):
     high = df["high"]
     low = df["low"]
 
+    n = len(df)
+    rsi_period = min(7, max(3, n - 1))
+    bb_period = min(10, n)
+    stoch_period = min(5, n)
+    momentum_period = min(3, n - 1)
+
     # EMA(5)
     ema5 = close.ewm(span=5, adjust=False).mean()
 
-    # RSI(7)
+    # RSI (adaptive for short verified history)
     delta = close.diff()
-    gain = delta.clip(lower=0).ewm(alpha=1 / 7, adjust=False).mean()
-    loss = (-delta.clip(upper=0)).ewm(alpha=1 / 7, adjust=False).mean()
+    gain = delta.clip(lower=0).ewm(alpha=1 / rsi_period, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1 / rsi_period, adjust=False).mean()
     rs = gain / loss.replace(0, float("nan"))
     rsi7 = 100 - (100 / (1 + rs))
 
-    # Bollinger(10)
-    mid = close.rolling(10).mean()
-    sd = close.rolling(10).std(ddof=0)
+    # Bollinger (adaptive for short verified history)
+    mid = close.rolling(bb_period).mean()
+    sd = close.rolling(bb_period).std(ddof=0)
     upper = mid + 2 * sd
     lower = mid - 2 * sd
 
-    # Stochastic(5)
-    low5 = low.rolling(5).min()
-    high5 = high.rolling(5).max()
+    # Stochastic (adaptive for short verified history)
+    low5 = low.rolling(stoch_period).min()
+    high5 = high.rolling(stoch_period).max()
     stoch5 = 100 * (close - low5) / (high5 - low5).replace(0, float("nan"))
 
     # Very short-term momentum
-    momentum3 = close.diff(3)
+    momentum3 = close.diff(momentum_period)
 
     latest = {
         "close": float(close.iloc[-1]),
@@ -246,9 +252,9 @@ def analyze_candles(candles):
     put_votes = votes.count("PUT")
     decisive = max(call_votes, put_votes)
 
-    if call_votes >= 4:
+    if call_votes >= 3 and call_votes > put_votes:
         signal = "CALL"
-    elif put_votes >= 4:
+    elif put_votes >= 3 and put_votes > call_votes:
         signal = "PUT"
     else:
         signal = "NO SIGNAL"
@@ -261,7 +267,7 @@ def analyze_candles(candles):
         "votes": votes,
         "indicators": latest,
         "candles_used": len(df),
-        "model": "EMA5 + RSI7 + Bollinger10 + Stochastic5 + Momentum3",
+        "model": f"EMA5 + RSI{rsi_period} + Bollinger{bb_period} + Stochastic{stoch_period} + Momentum{momentum_period}",
         "note": "Read-only indicator score. No order/trade action is performed and this is not a guarantee of outcome.",
     }
 

@@ -1,3 +1,7 @@
-# Cortex Simple Signal Generator
-Minimal read-only MVP. SSID input, asset/timeframe/expiry selection, API status, and a 5-indicator engine (EMA, RSI, Bollinger Bands, Stochastic, ADX). No order/trade execution.
-The analyze endpoint intentionally refuses to fabricate a signal until verified candle data is connected.
+# Cortex Quotex Signal Generator — read-only MVP
+
+SSID -> Quotex WebSocket -> history/load candles -> EMA/RSI/Bollinger/Stochastic/ADX -> CALL/PUT or NO SIGNAL.
+
+No buy/sell/pending-order method is used. SSID is kept in memory for the request and transport diagnostics record event names only, not payloads.
+
+Uses the unofficial open-source pyquotex client. Quotex can change its private WebSocket protocol at any time. Test with a demo/practice account.
